@@ -9,7 +9,7 @@ class Caser(Model):
         self.args = model_args
 
         # init args
-        L = self.args.L
+        self.L = self.args.L
         dims = self.args.d
         self.n_h = self.args.nh
         self.n_v = self.args.nv
@@ -22,10 +22,10 @@ class Caser(Model):
         self.item_embeddings = layers.Embedding(num_items, dims)
 
         # vertical conv layer
-        self.conv_v = layers.Conv2D(self.n_v, (L, 1), padding='same')
+        self.conv_v = layers.Conv2D(self.n_v, (self.L, 1), padding='same')
 
         # horizontal conv layer
-        lengths = [i + 1 for i in range(L)]
+        lengths = [i + 1 for i in range(self.L)]
         self.conv_h = [layers.Conv2D(self.n_h, (i, dims), padding='same') for i in lengths]
 
         # fully-connected layer
@@ -63,16 +63,19 @@ class Caser(Model):
 
             out_v = tf.reshape(out_v, [-1, self.fc1_dim_v])
             print("Shape of out_v after reshape:", out_v.shape)
+        
         out_hs = list()
+        
         if self.n_h:
             for conv in self.conv_h:
                 conv_out = self.ac_conv(conv(item_embs))
                 pool_out = tf.keras.layers.MaxPooling1D(pool_size=(tf.shape(conv_out)[2],))(tf.squeeze(conv_out, axis=1))
+                pool_out = tf.squeeze(pool_out, axis=1)  # Squeeze the tensor after max-pooling
                 out_hs.append(pool_out)
             out_h = tf.concat(out_hs, axis=1)
-
-        # Reshape out_h to ensure it has the same rank as out_v
-        out_h = tf.reshape(out_h, [-1, self.n_h * len(self.conv_h)])
+            print("Shape of out_h before reshaping:", out_h.shape)  # Debugging statement
+            out_h = tf.reshape(out_h, [-1, self.L * self.n_h])  # Reshape to [batch_size, L*n_h]
+            print("Shape of out_h after reshaping:", out_h.shape)  # Debugging statement
 
         out = tf.concat([out_v, out_h], axis=1)
         out = self.dropout(out)

@@ -79,7 +79,7 @@ class Recommender(object):
         self._num_users = interactions.num_users
 
         self.test_sequence = interactions.test_sequences
-
+        print("Value of L before creating Caser object:", self.model_args.L)
         self._net = Caser(self._num_users,
                           self._num_items,
                           self.model_args)
