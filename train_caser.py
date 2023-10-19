@@ -137,6 +137,11 @@ class Recommender(object):
             # Convert numpy arrays to TensorFlow tensors
             users, sequences, targets, negatives = [tf.convert_to_tensor(x, dtype=tf.int32) for x in [users_np, sequences_np, targets_np, negatives_np]]
 
+            print("Shape of tensor_name:", tf.shape(users))
+            print("Shape of tensor_name:", tf.shape(sequences))
+            print("Shape of tensor_name:", tf.shape(targets))
+            print("Shape of tensor_name:", tf.shape(negatives))
+
             epoch_loss = 0.0
 
             for (minibatch_num, (batch_users, batch_sequences, batch_targets, batch_negatives)) in enumerate(minibatch(users, sequences, targets, negatives, batch_size=self._batch_size)):
@@ -164,9 +169,12 @@ class Recommender(object):
                             batch_set_kernel = tf.zeros([size, config.T + config.neg_samples, config.T + config.neg_samples])
             
                             for n in range(size):
-                                batch_pos_kernel = tf.tensor_scatter_nd_update(batch_pos_kernel, [[n]], [l_kernel[batch_targets[n]-1][:, batch_targets[n]-1]])
-                                batch_set_kernel = tf.tensor_scatter_nd_update(batch_set_kernel, [[n]], [l_kernel[batch_sets[n]-1][:, batch_sets[n]-1]])
-            
+                                batch_target_index = batch_targets[n].numpy() - 1
+                                batch_set_index = batch_sets[n].numpy() - 1
+                                
+                                batch_pos_kernel = tf.tensor_scatter_nd_update(batch_pos_kernel, [[n]], [tf.gather(tf.gather(l_kernel, batch_target_index, axis=0), batch_target_index, axis=1)])
+                                batch_set_kernel = tf.tensor_scatter_nd_update(batch_set_kernel, [[n]], [tf.gather(tf.gather(l_kernel, batch_set_index, axis=0), batch_set_index, axis=1)])
+                                        
                             batch_pos_q = tf.linalg.diag(tf.exp(targets_prediction))
                             batch_set_q = tf.linalg.diag(tf.exp(batch_predictions))
                             batch_pos_kernel = tf.matmul(tf.matmul(batch_pos_q, batch_pos_kernel), batch_pos_q)
@@ -190,8 +198,17 @@ class Recommender(object):
                                 pos_q = tf.linalg.diag(tf.exp(targets_prediction[n]))
                                 set_q = tf.linalg.diag(tf.exp(batch_predictions[n]))
                     
-                                pos_l_kernel = l_kernel[batch_targets[n]-1][:, batch_targets[n]-1]
-                                set_l_kernel = l_kernel[batch_sets[n]-1][:, batch_sets[n]-1]
+                                #pos_l_kernel = l_kernel[batch_targets[n]-1][:, batch_targets[n]-1]
+                                #set_l_kernel = l_kernel[batch_sets[n]-1][:, batch_sets[n]-1]
+
+                                pos_l_kernel_indices = batch_targets[n] - 1
+                                set_l_kernel_indices = batch_sets[n] - 1
+
+                                pos_l_kernel = tf.gather(l_kernel, pos_l_kernel_indices, axis=0)
+                                pos_l_kernel = tf.gather(pos_l_kernel, pos_l_kernel_indices, axis=1)
+
+                                set_l_kernel = tf.gather(l_kernel, set_l_kernel_indices, axis=0)
+                                set_l_kernel = tf.gather(set_l_kernel, set_l_kernel_indices, axis=1)
                                 
                                 pos_k = tf.matmul(tf.matmul(pos_q, pos_l_kernel), pos_q)
                                 set_k = tf.matmul(tf.matmul(set_q, set_l_kernel), set_q)
@@ -246,8 +263,11 @@ class Recommender(object):
                                 pos_q = tf.linalg.diag(tf.exp(pos_predictions[n]))
                                 set_q = tf.linalg.diag(tf.exp(set_predictions[n]))
                                 
-                                pos_l_kernel = l_kernel[pos_items[n]-1][:, pos_items[n]-1]
-                                set_l_kernel = l_kernel[set_items[n]-1][:, set_items[n]-1]
+                                pos_item_index = pos_items[n].numpy() - 1
+                                set_item_index = set_items[n].numpy() - 1
+                                    
+                                pos_l_kernel = tf.gather(tf.gather(l_kernel, pos_item_index, axis=0), pos_item_index, axis=1)
+                                set_l_kernel = tf.gather(tf.gather(l_kernel, set_item_index, axis=0), set_item_index, axis=1)
                                 
                                 pos_k = tf.matmul(tf.matmul(pos_q, pos_l_kernel), pos_q)
                                 set_k = tf.matmul(tf.matmul(set_q, set_l_kernel), set_q)
@@ -350,10 +370,14 @@ class Recommender(object):
         item_ids = tf.convert_to_tensor(item_ids, dtype=tf.int32)
         user_id = tf.convert_to_tensor(np.array([[user_id]]), dtype=tf.int32)
 
+        print("Shape of tensor_name:", tf.shape(sequences))
+        print("Shape of tensor_name:", tf.shape(item_ids))
+        print("Shape of tensor_name:", tf.shape(user_id))
+
         # Assuming self._device is either 'CPU' or 'GPU'. Adjust accordingly.
         device = '/CPU:0' if self._device == 'CPU' else '/GPU:0'
         with tf.device(device):
-            out = self._net(sequences, user_id, items, for_pred=True)
+            out = self._net(sequences, user_id, item_ids, for_pred=True)
 
         return out.numpy().flatten()
     
